@@ -11,6 +11,7 @@ class TodosController < ApplicationController
   end
 
   def stats
-    render json: User.all.index_with { |user| user.todos.count }.transform_keys { |user| user.id.to_s }
+    counts = Todo.group(:user_id).count
+    render json: User.all.index_with { |user| counts.fetch(user.id, 0) }.transform_keys { |user| user.id.to_s }
   end
 end
