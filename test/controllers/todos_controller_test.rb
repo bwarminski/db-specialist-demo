@@ -4,6 +4,13 @@ require "test_helper"
 require "json"
 
 class TodosControllerTest < ActionDispatch::IntegrationTest
+  test "up endpoint reports app liveness" do
+    get "/up"
+
+    assert_response :success
+    assert_equal "ok", response.body
+  end
+
   test "index endpoint emits query log metadata and returns rows" do
     get "/todos"
 

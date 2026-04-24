@@ -1,11 +1,32 @@
-# ABOUTME: Loads the baseline demo records for the Rails anti-pattern endpoints.
-# ABOUTME: Creates stable todo rows so tests and local setup return visible JSON data.
-user = User.find_or_create_by!(name: "Demo User")
+# ABOUTME: Loads benchmark-sized demo records for the Rails anti-pattern endpoints.
+# ABOUTME: Seeds users and todos from env-controlled SQL so benchmark resets stay fast.
+rows_per_table = Integer(ENV.fetch("ROWS_PER_TABLE", "10000"))
+seed_value = Integer(ENV.fetch("SEED", "42"))
+open_fraction = Float(ENV.fetch("OPEN_FRACTION", "0.002"))
 
-Todo.find_or_create_by!(title: "starter todos task", user: user) do |todo|
-  todo.status = "open"
-end
+ActiveRecord::Base.connection.execute(<<~SQL)
+  TRUNCATE TABLE todos, users RESTART IDENTITY;
+  SELECT setseed(#{seed_value.to_f / 1000});
 
-Todo.find_or_create_by!(title: "closed todos task", user: user) do |todo|
-  todo.status = "closed"
-end
+  INSERT INTO users (name, created_at, updated_at)
+  SELECT
+    'user_' || i,
+    NOW(),
+    NOW()
+  FROM generate_series(1, 1000) AS i;
+
+  INSERT INTO todos (title, status, user_id, created_at, updated_at)
+  SELECT
+    'todo ' || i,
+    CASE
+      WHEN random() < #{open_fraction} THEN 'open'
+      ELSE 'closed'
+    END,
+    (random() * 999 + 1)::int,
+    NOW(),
+    NOW()
+  FROM generate_series(1, #{rows_per_table}) AS i;
+
+  ANALYZE users;
+  ANALYZE todos;
+SQL

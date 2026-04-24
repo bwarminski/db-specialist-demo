@@ -8,6 +8,11 @@ development:
   adapter: postgresql
   url: <%= ENV.fetch("DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/checkpoint_demo") %>
 
+benchmark:
+  <<: *default
+  adapter: postgresql
+  url: <%= ENV.fetch("DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/checkpoint_demo") %>
+
 test:
   <<: *default
   adapter: sqlite3
