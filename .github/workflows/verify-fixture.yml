@@ -1,0 +1,55 @@
+name: verify-fixture
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+env:
+  CHECKPOINT_COLLECTOR_PATH: /home/bjw/checkpoint-collector
+  DATABASE_URL: postgres://postgres:postgres@localhost:5432/checkpoint_demo
+  BENCH_ADAPTER_PG_ADMIN_URL: postgres://postgres:postgres@localhost:5432/postgres
+  PGPASSWORD: postgres
+
+jobs:
+  verify-fixture:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: 3.3
+          bundler-cache: true
+
+      - name: Install checkpoint-collector gems
+        run: BUNDLE_GEMFILE="$CHECKPOINT_COLLECTOR_PATH/collector/Gemfile" bundle install
+
+      - name: Create benchmark database
+        run: createdb -h localhost -U postgres checkpoint_demo
+
+      - name: Verify mixed fixture
+        run: |
+          CHECKPOINT_COLLECTOR_PATH=${CHECKPOINT_COLLECTOR_PATH:-/home/bjw/checkpoint-collector}
+
+          DATABASE_URL=postgres://postgres:postgres@localhost:5432/checkpoint_demo \
+          BENCH_ADAPTER_PG_ADMIN_URL=postgres://postgres:postgres@localhost:5432/postgres \
+          BUNDLE_GEMFILE="$CHECKPOINT_COLLECTOR_PATH/collector/Gemfile" \
+          "$CHECKPOINT_COLLECTOR_PATH/bin/load" verify-fixture \
+            --workload missing-index-todos \
+            --adapter "$CHECKPOINT_COLLECTOR_PATH/adapters/rails/bin/bench-adapter" \
+            --app-root "$PWD"
