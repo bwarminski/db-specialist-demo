@@ -1,8 +1,8 @@
 # ABOUTME: Loads benchmark-sized demo records for the Rails anti-pattern endpoints.
 # ABOUTME: Seeds users and todos from env-controlled SQL so benchmark resets stay fast.
-rows_per_table = Integer(ENV.fetch("ROWS_PER_TABLE", "10000"))
+rows_per_table = Integer(ENV.fetch("ROWS_PER_TABLE", "100000"))
 seed_value = Integer(ENV.fetch("SEED", "42"))
-open_fraction = Float(ENV.fetch("OPEN_FRACTION", "0.002"))
+open_fraction = Float(ENV.fetch("OPEN_FRACTION", "0.6"))
 
 ActiveRecord::Base.connection.execute(<<~SQL)
   TRUNCATE TABLE todos, users RESTART IDENTITY;
