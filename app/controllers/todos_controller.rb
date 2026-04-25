@@ -36,6 +36,16 @@ class TodosController < ApplicationController
     render json: { deleted_count: deleted_count }
   end
 
+  def counts
+    render json: User.all.index_with { |user| user.todos.count }.transform_keys { |user| user.id.to_s }
+  end
+
+  def search
+    items = Todo.where("title LIKE ?", "%#{params[:q]}%").order(created_at: :desc).limit(50)
+
+    render json: { items: items.as_json(only: [:id, :user_id, :title, :status, :created_at, :updated_at]) }
+  end
+
   def status
     render json: Todo.where(status: params.fetch(:status, "open"))
   end

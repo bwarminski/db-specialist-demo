@@ -8,6 +8,8 @@ Rails.application.routes.draw do
 
   scope "/api" do
     get "/todos", to: "todos#api_index"
+    get "/todos/counts", to: "todos#counts"
+    get "/todos/search", to: "todos#search"
     post "/todos", to: "todos#create"
     patch "/todos/:id", to: "todos#update"
     delete "/todos/completed", to: "todos#completed"

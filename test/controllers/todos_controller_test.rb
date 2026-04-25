@@ -129,4 +129,60 @@ class TodosControllerTest < ActionDispatch::IntegrationTest
     assert Todo.exists?(second_closed.id)
     assert_equal "open", Todo.find_by!(title: "first open").status
   end
+
+  test "api counts returns per-user totals while preserving count n plus one" do
+    first_user = User.create!(name: "counts first user")
+    second_user = User.create!(name: "counts second user")
+    2.times do |index|
+      Todo.create!(user: first_user, title: "counts first todo #{index}", status: "open")
+    end
+    Todo.create!(user: second_user, title: "counts second todo", status: "closed")
+
+    count_queries = capture_queries do
+      get "/api/todos/counts"
+    end
+
+    assert_response :success
+    body = JSON.parse(response.body)
+
+    assert_equal 2, body.fetch(first_user.id.to_s)
+    assert_equal 1, body.fetch(second_user.id.to_s)
+    assert_operator count_queries.count { |query| query.match?(/COUNT\(\*\).*"todos"\."user_id"/) }, :>=, 2
+  end
+
+  test "api search returns matching todos while preserving contains like query shape" do
+    user = User.create!(name: "api search user")
+    matching_todo = Todo.create!(user: user, title: "alpha task", status: "open", created_at: 10.minutes.ago, updated_at: 10.minutes.ago)
+    newer_matching_todo = Todo.create!(user: user, title: "task alpha beta", status: "closed", created_at: 5.minutes.ago, updated_at: 5.minutes.ago)
+    Todo.create!(user: user, title: "gamma task", status: "open")
+
+    search_queries = capture_queries do
+      get "/api/todos/search", params: { q: "alpha" }
+    end
+
+    assert_response :success
+    body = JSON.parse(response.body)
+
+    assert_equal [newer_matching_todo.id, matching_todo.id], body.fetch("items").map { |todo| todo.fetch("id") }
+    assert_equal ["closed", "open"], body.fetch("items").map { |todo| todo.fetch("status") }.sort
+    assert search_queries.any? { |query| query.match?(/title LIKE '%alpha%'/) }
+  end
+
+  private
+
+  def capture_queries
+    queries = []
+    callback = lambda do |_name, _started, _finished, _unique_id, payload|
+      next if payload[:name] == "SCHEMA"
+      next unless payload[:sql].start_with?("SELECT")
+
+      queries << payload[:sql]
+    end
+
+    ActiveSupport::Notifications.subscribed(callback, "sql.active_record") do
+      yield
+    end
+
+    queries
+  end
 end
