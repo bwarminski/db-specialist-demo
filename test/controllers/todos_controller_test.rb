@@ -1,5 +1,5 @@
 # ABOUTME: Exercises the demo todo endpoints through Rails integration requests.
-# ABOUTME: Verifies the Task 2 JSON endpoints exist and accept the planned params.
+# ABOUTME: Verifies the HTML and JSON API surfaces needed by the benchmark app.
 require "test_helper"
 require "json"
 
@@ -70,19 +70,28 @@ class TodosControllerTest < ActionDispatch::IntegrationTest
     assert_equal 2, stats.fetch(user.id.to_s)
   end
 
-  test "api index lists open todos newest first" do
+  test "api index paginates open todos using created_desc order" do
     user = User.create!(name: "api index user")
-    older_open = Todo.create!(user: user, title: "older open todo", status: "open", created_at: 20.minutes.from_now, updated_at: 20.minutes.from_now)
-    newer_open = Todo.create!(user: user, title: "newer open todo", status: "open", created_at: 30.minutes.from_now, updated_at: 30.minutes.from_now)
+    oldest_open = Todo.create!(user: user, title: "oldest open todo", status: "open", created_at: 10.minutes.from_now, updated_at: 10.minutes.from_now)
+    middle_open = Todo.create!(user: user, title: "middle open todo", status: "open", created_at: 20.minutes.from_now, updated_at: 20.minutes.from_now)
+    newest_open = Todo.create!(user: user, title: "newest open todo", status: "open", created_at: 30.minutes.from_now, updated_at: 30.minutes.from_now)
     Todo.create!(user: user, title: "closed todo", status: "closed", created_at: Time.current, updated_at: Time.current)
 
-    get "/api/todos", params: { status: "open", page: 1, per_page: 2, order: "created_desc" }
+    get "/api/todos", params: { status: "open", page: 2, per_page: 1, order: "created_desc" }
 
     assert_response :success
     body = JSON.parse(response.body)
 
-    assert_equal [newer_open.id, older_open.id], body.fetch("items").map { |todo| todo.fetch("id") }
+    assert_equal [middle_open.id], body.fetch("items").map { |todo| todo.fetch("id") }
     assert_equal ["open"], body.fetch("items").map { |todo| todo.fetch("status") }.uniq
+    refute_includes body.fetch("items").map { |todo| todo.fetch("id") }, newest_open.id
+    refute_includes body.fetch("items").map { |todo| todo.fetch("id") }, oldest_open.id
+  end
+
+  test "api index rejects unsupported order values" do
+    get "/api/todos", params: { status: "open", page: 1, per_page: 1, order: "title_asc" }
+
+    assert_response :bad_request
   end
 
   test "api create and update persist todo changes" do

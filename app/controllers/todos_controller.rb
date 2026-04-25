@@ -7,6 +7,9 @@ class TodosController < ApplicationController
   end
 
   def api_index
+    order = params[:order].presence
+    return head :bad_request if order.present? && order != "created_desc"
+
     todos = Todo.ordered_by_created_desc
     todos = todos.with_status(params[:status])
     todos = todos.page(params[:page], params[:per_page])
