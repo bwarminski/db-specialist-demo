@@ -131,23 +131,28 @@ class TodosControllerTest < ActionDispatch::IntegrationTest
   end
 
   test "api counts returns per-user totals while preserving count n plus one" do
-    first_user = User.create!(name: "counts first user")
-    second_user = User.create!(name: "counts second user")
-    2.times do |index|
-      Todo.create!(user: first_user, title: "counts first todo #{index}", status: "open")
+    created_users = 4.times.map do |index|
+      user = User.create!(name: "counts user #{index}")
+      Todo.create!(user: user, title: "counts todo #{index}", status: index.even? ? "open" : "closed")
+      user
     end
-    Todo.create!(user: second_user, title: "counts second todo", status: "closed")
 
-    count_queries = capture_queries do
+    count_query_events = capture_query_events do
       get "/api/todos/counts"
     end
 
     assert_response :success
     body = JSON.parse(response.body)
 
-    assert_equal 2, body.fetch(first_user.id.to_s)
-    assert_equal 1, body.fetch(second_user.id.to_s)
-    assert_operator count_queries.count { |query| query.match?(/COUNT\(\*\).*"todos"\."user_id"/) }, :>=, 2
+    created_users.each do |user|
+      assert_equal 1, body.fetch(user.id.to_s)
+    end
+
+    per_user_count_queries = count_query_events.count do |event|
+      event.fetch(:sql).match?(/COUNT\(\*\)/) && event.fetch(:sql).match?(/"todos"\."user_id"/)
+    end
+
+    assert_operator per_user_count_queries, :>=, created_users.length
   end
 
   test "api search returns matching todos while preserving contains like query shape" do
@@ -156,7 +161,7 @@ class TodosControllerTest < ActionDispatch::IntegrationTest
     newer_matching_todo = Todo.create!(user: user, title: "task alpha beta", status: "closed", created_at: 5.minutes.ago, updated_at: 5.minutes.ago)
     Todo.create!(user: user, title: "gamma task", status: "open")
 
-    search_queries = capture_queries do
+    search_query_events = capture_query_events do
       get "/api/todos/search", params: { q: "alpha" }
     end
 
@@ -165,24 +170,36 @@ class TodosControllerTest < ActionDispatch::IntegrationTest
 
     assert_equal [newer_matching_todo.id, matching_todo.id], body.fetch("items").map { |todo| todo.fetch("id") }
     assert_equal ["closed", "open"], body.fetch("items").map { |todo| todo.fetch("status") }.sort
-    assert search_queries.any? { |query| query.match?(/title LIKE '%alpha%'/) }
+    assert search_query_events.any? { |event| contains_like_query?(event, "alpha") }
   end
 
   private
 
-  def capture_queries
-    queries = []
+  def capture_query_events
+    query_events = []
     callback = lambda do |_name, _started, _finished, _unique_id, payload|
       next if payload[:name] == "SCHEMA"
       next unless payload[:sql].start_with?("SELECT")
 
-      queries << payload[:sql]
+      query_events << {
+        sql: payload[:sql],
+        binds: payload.fetch(:binds).map { |bind| bind.value_for_database }
+      }
     end
 
     ActiveSupport::Notifications.subscribed(callback, "sql.active_record") do
       yield
     end
 
-    queries
+    query_events
+  end
+
+  def contains_like_query?(event, term)
+    sql = event.fetch(:sql)
+    binds = event.fetch(:binds)
+
+    sql.match?(/title/i) &&
+      sql.match?(/\bLIKE\b/i) &&
+      (binds.include?("%#{term}%") || sql.include?("%#{term}%"))
   end
 end
