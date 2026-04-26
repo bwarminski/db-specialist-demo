@@ -42,6 +42,15 @@ class SeedExecutionTest < Minitest::Test
     refute_equal first_snapshot.fetch("first_statuses"), different_snapshot.fetch("first_statuses")
   end
 
+  def test_seed_respects_user_count_override
+    prepare_benchmark_database
+
+    snapshot = run_seed_snapshot("ROWS_PER_TABLE" => "21", "USER_COUNT" => "7")
+
+    assert_equal 7, snapshot.fetch("users")
+    assert_equal 21, snapshot.fetch("todos")
+  end
+
   private
 
   def run_seed_snapshot(overrides = {})

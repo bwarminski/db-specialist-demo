@@ -10,7 +10,7 @@ class TodosController < ApplicationController
     order = params[:order].presence
     return head :bad_request if order.present? && order != "created_desc"
 
-    todos = Todo.ordered_by_created_desc
+    todos = user_todos.ordered_by_created_desc
     todos = todos.with_status(params[:status])
     todos = todos.page(params[:page], params[:per_page])
 
@@ -41,7 +41,7 @@ class TodosController < ApplicationController
   end
 
   def search
-    items = Todo.where("title LIKE ?", "%#{params[:q]}%").order(created_at: :desc).limit(50)
+    items = user_todos.where("title LIKE ?", "%#{params[:q]}%").order(created_at: :desc).limit(50)
 
     render json: { items: items.as_json(only: [:id, :user_id, :title, :status, :created_at, :updated_at]) }
   end
@@ -62,5 +62,9 @@ class TodosController < ApplicationController
 
   def todo_update_params
     params.permit(:title, :status)
+  end
+
+  def user_todos
+    Todo.where(user_id: params.require(:user_id))
   end
 end

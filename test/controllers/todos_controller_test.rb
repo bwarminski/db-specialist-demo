@@ -70,14 +70,16 @@ class TodosControllerTest < ActionDispatch::IntegrationTest
     assert_equal 2, stats.fetch(user.id.to_s)
   end
 
-  test "api index paginates open todos using created_desc order" do
+  test "api index paginates one user's open todos using created_desc order" do
     user = User.create!(name: "api index user")
+    other_user = User.create!(name: "api index other user")
     oldest_open = Todo.create!(user: user, title: "oldest open todo", status: "open", created_at: 10.minutes.from_now, updated_at: 10.minutes.from_now)
     middle_open = Todo.create!(user: user, title: "middle open todo", status: "open", created_at: 20.minutes.from_now, updated_at: 20.minutes.from_now)
     newest_open = Todo.create!(user: user, title: "newest open todo", status: "open", created_at: 30.minutes.from_now, updated_at: 30.minutes.from_now)
     Todo.create!(user: user, title: "closed todo", status: "closed", created_at: Time.current, updated_at: Time.current)
+    other_user_open = Todo.create!(user: other_user, title: "other user open todo", status: "open", created_at: 40.minutes.from_now, updated_at: 40.minutes.from_now)
 
-    get "/api/todos", params: { status: "open", page: 2, per_page: 1, order: "created_desc" }
+    get "/api/todos", params: { user_id: user.id, status: "open", page: 2, per_page: 1 }
 
     assert_response :success
     body = JSON.parse(response.body)
@@ -86,6 +88,7 @@ class TodosControllerTest < ActionDispatch::IntegrationTest
     assert_equal ["open"], body.fetch("items").map { |todo| todo.fetch("status") }.uniq
     refute_includes body.fetch("items").map { |todo| todo.fetch("id") }, newest_open.id
     refute_includes body.fetch("items").map { |todo| todo.fetch("id") }, oldest_open.id
+    refute_includes body.fetch("items").map { |todo| todo.fetch("id") }, other_user_open.id
   end
 
   test "api index rejects unsupported order values" do
@@ -125,6 +128,7 @@ class TodosControllerTest < ActionDispatch::IntegrationTest
     end
 
     assert_response :success
+    assert_equal 1, JSON.parse(response.body).fetch("deleted_count")
     refute Todo.exists?(first_closed.id)
     assert Todo.exists?(second_closed.id)
     assert_equal "open", Todo.find_by!(title: "first open").status
@@ -155,14 +159,16 @@ class TodosControllerTest < ActionDispatch::IntegrationTest
     assert_operator per_user_count_queries, :>=, created_users.length
   end
 
-  test "api search returns matching todos while preserving contains like query shape" do
+  test "api search filters matching todos to one user while preserving contains like query shape" do
     user = User.create!(name: "api search user")
+    other_user = User.create!(name: "api search other user")
     matching_todo = Todo.create!(user: user, title: "alpha task", status: "open", created_at: 10.minutes.ago, updated_at: 10.minutes.ago)
     newer_matching_todo = Todo.create!(user: user, title: "task alpha beta", status: "closed", created_at: 5.minutes.ago, updated_at: 5.minutes.ago)
     Todo.create!(user: user, title: "gamma task", status: "open")
+    other_user_match = Todo.create!(user: other_user, title: "alpha other user task", status: "open", created_at: 1.minute.ago, updated_at: 1.minute.ago)
 
     search_query_events = capture_query_events do
-      get "/api/todos/search", params: { q: "alpha" }
+      get "/api/todos/search", params: { user_id: user.id, q: "alpha" }
     end
 
     assert_response :success
@@ -170,6 +176,7 @@ class TodosControllerTest < ActionDispatch::IntegrationTest
 
     assert_equal [newer_matching_todo.id, matching_todo.id], body.fetch("items").map { |todo| todo.fetch("id") }
     assert_equal ["closed", "open"], body.fetch("items").map { |todo| todo.fetch("status") }.sort
+    refute_includes body.fetch("items").map { |todo| todo.fetch("id") }, other_user_match.id
     assert search_query_events.any? { |event| contains_like_query?(event, "alpha") }
   end
 
