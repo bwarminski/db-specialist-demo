@@ -49,6 +49,18 @@ class SeedExecutionTest < Minitest::Test
 
     assert_equal 7, snapshot.fetch("users")
     assert_equal 21, snapshot.fetch("todos")
+    assert_equal(
+      {
+        "1" => 3,
+        "2" => 3,
+        "3" => 3,
+        "4" => 3,
+        "5" => 3,
+        "6" => 3,
+        "7" => 3
+      },
+      snapshot.fetch("todo_counts_by_user")
+    )
   end
 
   private
@@ -61,7 +73,8 @@ class SeedExecutionTest < Minitest::Test
         users: User.count,
         todos: Todo.count,
         open_ratio: Todo.where(status: "open").count.to_f / Todo.count,
-        first_statuses: Todo.order(:id).limit(20).pluck(:status)
+        first_statuses: Todo.order(:id).limit(20).pluck(:status),
+        todo_counts_by_user: Todo.group(:user_id).order(:user_id).count.transform_keys(&:to_s)
       )
     RUBY
 

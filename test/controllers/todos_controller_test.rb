@@ -92,7 +92,9 @@ class TodosControllerTest < ActionDispatch::IntegrationTest
   end
 
   test "api index rejects unsupported order values" do
-    get "/api/todos", params: { status: "open", page: 1, per_page: 1, order: "title_asc" }
+    user = User.create!(name: "api order user")
+
+    get "/api/todos", params: { user_id: user.id, status: "open", page: 1, per_page: 1, order: "title_asc" }
 
     assert_response :bad_request
   end
